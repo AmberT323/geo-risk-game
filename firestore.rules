@@ -1,0 +1,34 @@
+rules_version = '2';
+// 隱私原則：
+// - 玩家只能讀寫自己的文件，看不到其他玩家的選擇。
+// - 主持人可以讀取房間內所有玩家（用於匿名統計），畫面上只顯示彙總結果。
+// - 私人壓力測試與行動卡完全不寫入 Firestore。
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function isHost(code) {
+      return get(/databases/$(db)/documents/rooms/$(code)).data.hostUid == request.auth.uid;
+    }
+
+    match /rooms/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+      allow update: if signedIn() && resource.data.hostUid == request.auth.uid
+                    && request.resource.data.hostUid == resource.data.hostUid;
+      allow delete: if false;
+
+      match /players/{uid} {
+        allow read: if signedIn() && (request.auth.uid == uid || isHost(code));
+        allow create: if signedIn() && request.auth.uid == uid
+                      && request.resource.data.uid == uid
+                      && request.resource.data.roleId == null
+                      && exists(/databases/$(db)/documents/rooms/$(code));
+        // 玩家不能自行更換角色；角色只能由主持人分配
+        allow update: if signedIn() && (
+          (request.auth.uid == uid && request.resource.data.roleId == resource.data.roleId)
+          || isHost(code));
+        allow delete: if false;
+      }
+    }
+  }
+}
