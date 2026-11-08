@@ -28,6 +28,18 @@ export default function Host() {
     QRCode.toDataURL(url, { margin: 1, width: 360, color: { dark: '#0f1419', light: '#ffffff' } }).then(setQr);
   }, [code]);
 
+  // 遊戲開始後才加入（或開始瞬間加入）的玩家：自動補發目前最少人使用的角色
+  const lateKey = room && room.phase !== 'lobby' ? players.filter((p) => !p.roleId).map((p) => p.uid).join(',') : '';
+  useEffect(() => {
+    if (!lateKey) return;
+    const used = new Map(ROLES.map((r) => [r.id, players.filter((p) => p.roleId === r.id).length]));
+    for (const p of players.filter((x) => !x.roleId)) {
+      const r = [...used.entries()].sort((x, y) => x[1] - y[1])[0][0];
+      used.set(r, used.get(r)! + 1);
+      be.updatePlayer(code, p.uid, { roleId: r });
+    }
+  }, [lateKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (room === undefined) return <div className="wrap center muted">連線中…</div>;
   if (!room) return <div className="wrap center">找不到房間 {code}</div>;
   if (uid && room.hostUid !== uid) return <div className="wrap center">你不是這個房間的主持人。</div>;
